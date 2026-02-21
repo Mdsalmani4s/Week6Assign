@@ -176,3 +176,64 @@ print(f"Models initialized on: {device}")
 
 
 
+
+# ============================================================
+# STEP 5: Train Pix2Pix GAN
+# Commit: "Trained Pix2Pix GAN for satellite-to-map translation"
+# ============================================================
+import torch.optim as optim
+
+adversarial_loss = nn.BCELoss()
+l1_loss = nn.L1Loss()
+
+optimizer_G = optim.Adam(G.parameters(), lr=0.0002, betas=(0.5, 0.999))
+optimizer_D = optim.Adam(D.parameters(), lr=0.0002, betas=(0.5, 0.999))
+
+# Track losses for visualization
+g_losses, d_losses = [], []
+
+EPOCHS = 10
+LAMBDA_L1 = 10  # Weight for L1 reconstruction loss
+
+print("\nStarting training...")
+for epoch in range(EPOCHS):
+    epoch_g_loss, epoch_d_loss, batches = 0, 0, 0
+
+    for sat_imgs, map_imgs in dataloader:
+        sat_imgs = sat_imgs.to(device)
+        map_imgs = map_imgs.to(device)
+        batch_size = sat_imgs.size(0)
+
+        real_labels = torch.ones(batch_size, 1, 30, 30).to(device)
+        fake_labels = torch.zeros(batch_size, 1, 30, 30).to(device)
+
+        # --- Train Discriminator ---
+        optimizer_D.zero_grad()
+        fake_maps = G(sat_imgs)
+
+        real_loss = adversarial_loss(D(sat_imgs, map_imgs), real_labels)
+        fake_loss = adversarial_loss(D(sat_imgs, fake_maps.detach()), fake_labels)
+        d_loss = (real_loss + fake_loss) / 2
+        d_loss.backward()
+        optimizer_D.step()
+
+        # --- Train Generator ---
+        optimizer_G.zero_grad()
+        fake_maps = G(sat_imgs)
+        g_adv = adversarial_loss(D(sat_imgs, fake_maps), real_labels)
+        g_l1 = l1_loss(fake_maps, map_imgs) * LAMBDA_L1
+        g_loss = g_adv + g_l1
+        g_loss.backward()
+        optimizer_G.step()
+
+        epoch_g_loss += g_loss.item()
+        epoch_d_loss += d_loss.item()
+        batches += 1
+
+    avg_g = epoch_g_loss / batches
+    avg_d = epoch_d_loss / batches
+    g_losses.append(avg_g)
+    d_losses.append(avg_d)
+    print(f"Epoch [{epoch+1}/{EPOCHS}] | D Loss: {avg_d:.4f} | G Loss: {avg_g:.4f}")
+
+print("Training complete!")
