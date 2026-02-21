@@ -85,3 +85,94 @@ print(f"Dataset size: {len(dataset)} image pairs")
 
 
 
+
+# ============================================================
+# STEP 4: Implement Pix2Pix Model (Generator + Discriminator)
+# Commit: "Implemented Pix2Pix Generator and Discriminator models"
+# ============================================================
+import torch.nn as nn
+
+class UNetBlock(nn.Module):
+    """Single U-Net encoder-decoder block with skip connection support."""
+    def __init__(self, in_ch, out_ch, down=True, use_bn=True, dropout=False):
+        super().__init__()
+        layers = []
+        if down:
+            layers.append(nn.Conv2d(in_ch, out_ch, 4, 2, 1, bias=False))
+        else:
+            layers.append(nn.ConvTranspose2d(in_ch, out_ch, 4, 2, 1, bias=False))
+        if use_bn:
+            layers.append(nn.BatchNorm2d(out_ch))
+        if dropout:
+            layers.append(nn.Dropout(0.5))
+        self.block = nn.Sequential(*layers)
+        self.act_down = nn.LeakyReLU(0.2)
+        self.act_up = nn.ReLU()
+        self.down = down
+
+    def forward(self, x):
+        act = self.act_down if self.down else self.act_up
+        return act(self.block(x))
+
+
+class Generator(nn.Module):
+    """Simplified U-Net Generator for Pix2Pix."""
+    def __init__(self):
+        super().__init__()
+        # Encoder (downsampling)
+        self.enc1 = nn.Sequential(nn.Conv2d(3, 64, 4, 2, 1), nn.LeakyReLU(0.2))
+        self.enc2 = UNetBlock(64, 128)
+        self.enc3 = UNetBlock(128, 256)
+        self.enc4 = UNetBlock(256, 512)
+
+        # Decoder (upsampling with skip connections)
+        self.dec1 = UNetBlock(512, 256, down=False, dropout=True)
+        self.dec2 = UNetBlock(512, 128, down=False)   # 512 = 256 + skip 256
+        self.dec3 = UNetBlock(256, 64, down=False)    # 256 = 128 + skip 128
+        self.final = nn.Sequential(
+            nn.ConvTranspose2d(128, 3, 4, 2, 1),      # 128 = 64 + skip 64
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        e1 = self.enc1(x)
+        e2 = self.enc2(e1)
+        e3 = self.enc3(e2)
+        e4 = self.enc4(e3)
+
+        d1 = self.dec1(e4)
+        d2 = self.dec2(torch.cat([d1, e3], dim=1))
+        d3 = self.dec3(torch.cat([d2, e2], dim=1))
+        return self.final(torch.cat([d3, e1], dim=1))
+
+
+class Discriminator(nn.Module):
+    """PatchGAN Discriminator: classifies 70x70 image patches."""
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Conv2d(6, 64, 4, 2, 1),                         # input: sat+map concatenated
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, 2, 1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, 2, 1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(256, 1, 4, 1, 1),                        # patch output
+            nn.Sigmoid()
+        )
+
+    def forward(self, sat, target):
+        x = torch.cat([sat, target], dim=1)  # Concatenate along channel dim
+        return self.model(x)
+
+# Initialize models
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+G = Generator().to(device)
+D = Discriminator().to(device)
+print(f"Models initialized on: {device}")
+
+
+
+
