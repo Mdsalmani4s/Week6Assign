@@ -83,9 +83,6 @@ dataset = Pix2PixDataset("./data/maps", transform=transform)
 dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
 print(f"Dataset size: {len(dataset)} image pairs")
 
-
-
-
 # ============================================================
 # STEP 4: Implement Pix2Pix Model (Generator + Discriminator)
 # Commit: "Implemented Pix2Pix Generator and Discriminator models"
@@ -173,10 +170,6 @@ G = Generator().to(device)
 D = Discriminator().to(device)
 print(f"Models initialized on: {device}")
 
-
-
-
-
 # ============================================================
 # STEP 5: Train Pix2Pix GAN
 # Commit: "Trained Pix2Pix GAN for satellite-to-map translation"
@@ -204,12 +197,14 @@ for epoch in range(EPOCHS):
         map_imgs = map_imgs.to(device)
         batch_size = sat_imgs.size(0)
 
-        real_labels = torch.ones(batch_size, 1, 30, 30).to(device)
-        fake_labels = torch.zeros(batch_size, 1, 30, 30).to(device)
-
         # --- Train Discriminator ---
         optimizer_D.zero_grad()
         fake_maps = G(sat_imgs)
+
+        # Dynamically match label size to actual discriminator output
+        d_out_shape = D(sat_imgs, map_imgs).shape
+        real_labels = torch.ones(d_out_shape).to(device)
+        fake_labels = torch.zeros(d_out_shape).to(device)
 
         real_loss = adversarial_loss(D(sat_imgs, map_imgs), real_labels)
         fake_loss = adversarial_loss(D(sat_imgs, fake_maps.detach()), fake_labels)
@@ -237,3 +232,86 @@ for epoch in range(EPOCHS):
     print(f"Epoch [{epoch+1}/{EPOCHS}] | D Loss: {avg_d:.4f} | G Loss: {avg_g:.4f}")
 
 print("Training complete!")
+
+# ============================================================
+# STEP 6: Evaluate and Visualize Translated Images
+# Commit: "Evaluated Pix2Pix and visualized image translation"
+# ============================================================
+
+os.makedirs("outputs", exist_ok=True)
+G.eval()
+
+with torch.no_grad():
+    # Get a test sample
+    sat_sample, map_sample = dataset[0]
+    sat_tensor = sat_sample.unsqueeze(0).to(device)
+    translated = G(sat_tensor).squeeze().cpu()
+
+    # Denormalize from [-1,1] to [0,1] for display
+    def denorm(t):
+        return (t * 0.5 + 0.5).clamp(0, 1).permute(1, 2, 0).numpy()
+
+    # ------- OUTPUT 1: Sample Translation Comparison -------
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    axes[0].imshow(denorm(sat_sample))
+    axes[0].set_title("Input (Satellite)", fontsize=12)
+    axes[0].axis("off")
+
+    axes[1].imshow(denorm(translated))
+    axes[1].set_title("Generated (Map)", fontsize=12)
+    axes[1].axis("off")
+
+    axes[2].imshow(denorm(map_sample))
+    axes[2].set_title("Ground Truth (Map)", fontsize=12)
+    axes[2].axis("off")
+
+    plt.suptitle("Pix2Pix GAN: Satellite → Map Translation", fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig("outputs/sample_output.jpg", dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved: outputs/sample_output.jpg")
+
+    # ------- OUTPUT 2: Training Loss Curves -------
+    fig, ax = plt.subplots(figsize=(8, 5))
+    epochs_range = range(1, EPOCHS + 1)
+    ax.plot(epochs_range, g_losses, label="Generator Loss", color="#e74c3c", linewidth=2, marker='o')
+    ax.plot(epochs_range, d_losses, label="Discriminator Loss", color="#3498db", linewidth=2, marker='s')
+    ax.set_xlabel("Epoch", fontsize=12)
+    ax.set_ylabel("Loss", fontsize=12)
+    ax.set_title("Pix2Pix GAN Training Loss Curves", fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11)
+    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.set_xticks(epochs_range)
+    plt.tight_layout()
+    plt.savefig("outputs/training_losses.png", dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved: outputs/training_losses.png")
+
+    # ------- OUTPUT 3: Pixel Intensity Distribution -------
+    # Compare pixel distributions: real map vs generated map (across 10 samples)
+    real_pixels, fake_pixels = [], []
+    for i in range(min(10, len(dataset))):
+        sat_i, map_i = dataset[i]
+        sat_tensor_i = sat_i.unsqueeze(0).to(device)
+        fake_i = G(sat_tensor_i).squeeze().cpu()
+        real_pixels.append(map_i.numpy().flatten())
+        fake_pixels.append(fake_i.numpy().flatten())
+
+    real_pixels = np.concatenate(real_pixels)
+    fake_pixels = np.concatenate(fake_pixels)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(real_pixels, bins=60, alpha=0.6, color="#2ecc71", label="Real Maps", density=True)
+    ax.hist(fake_pixels, bins=60, alpha=0.6, color="#e74c3c", label="Generated Maps", density=True)
+    ax.set_xlabel("Pixel Intensity (normalized)", fontsize=12)
+    ax.set_ylabel("Density", fontsize=12)
+    ax.set_title("Pixel Intensity Distribution:\nReal vs Generated Map Images", fontsize=13, fontweight='bold')
+    ax.legend(fontsize=11)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.savefig("outputs/pixel_distribution.png", dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved: outputs/pixel_distribution.png")
+
+print("\nAll outputs saved to ./outputs/")
+print("Done! Push to GitHub with commit: 'Evaluated Pix2Pix and visualized image translation'")

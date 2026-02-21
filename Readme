@@ -1,0 +1,35 @@
+# Pix2Pix GAN — Satellite to Map Translation
+
+## Setup
+
+```bash
+pip install torch torchvision numpy matplotlib pillow opencv-python
+```
+
+## Run
+
+```bash
+python pix2pix.py
+```
+
+> No dataset? The script runs on **synthetic data automatically** for demo purposes.  
+> For real results, place paired satellite/map images (side-by-side) in `./data/maps/`.
+
+## Outputs (saved to `./outputs/`)
+
+| File | Description |
+|------|-------------|
+| `sample_output.jpg` | Input satellite → Generated map → Ground truth |
+| `training_losses.png` | Generator & Discriminator loss curves over epochs |
+| `pixel_distribution.png` | Pixel intensity: real vs generated maps |
+
+## GitHub Commit Steps
+
+| Step | Commit Message |
+|------|---------------|
+| 1 | `Initial commit - project structure created` |
+| 2 | `Installed required libraries` |
+| 3 | `Loaded and preprocessed image datasets for Pix2Pix GAN` |
+| 4 | `Implemented Pix2Pix Generator and Discriminator models` |
+| 5 | `Trained Pix2Pix GAN for satellite-to-map translation` |
+| 6 | `Evaluated Pix2Pix and visualized image translation` |
